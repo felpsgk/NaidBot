@@ -1,6 +1,12 @@
 CREATE DATABASE users;
 CREATE TABLE users(
-   id VARCHAR(255),
+   id VARCHAR(255) NOT NULL AUTO_INCREMENT,
    link VARCHAR(255),
+   PRIMARY KEY( id )
+);
+CREATE TABLE massaDados(
+   id VARCHAR(255) NOT NULL AUTO_INCREMENT,
+   telefone VARCHAR(255),
+   nome VARCHAR(255),
    PRIMARY KEY( id )
 );
