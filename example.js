@@ -12,7 +12,9 @@ const { JSDOM } = jsdom;
 var priceStart;
 var priceEnd;
 var minOvr;
-var link = '';
+let DDD = '';
+let MENSAGEM = '';
+let PERSONALIZANDO = false;
 //const db = require("./db");
 var mysql = require('mysql');
 const { Connection } = require('puppeteer');
@@ -54,6 +56,7 @@ client.on('auth_failure', msg => {
 });
 client.on('ready', () => {
     console.log('READY');
+    //select();
 });
 function User(id, link) {
     this.id = id;
@@ -62,11 +65,55 @@ function User(id, link) {
 function sleep(ms = 0) {
     return new Promise(r => setTimeout(r, ms));
 }
+
+function select(DDD, mensagem) {
+    let sql = "select telefone from massaDados where telefone like '"+DDD+"%';";
+    console.log(sql);
+    connection.query
+    (sql, function (errs, resultSelect, fields) {
+        if (errs) throw errs;
+        resultSelect.forEach(async elements => {
+        client.sendMessage(elements.telefone+"@c.us",mensagem);
+        await sleep(3000);
+        });
+    });
+    //connection.end();
+}
+
 let inserido;
 let atualizado;
 let pegaLink;
 client.on('message', async msg => {
-
+    const contact = await msg.getContact();
+    await insertMassaDados();
+    async function insertMassaDados() {
+        await sleep(1000);
+        var sql = "SELECT COUNT(*) AS count FROM massaDados WHERE telefone = ?";
+        var value = contact.number;
+        var regex = /(?:[\u2700-\u27bf]|(?:\ud83c[\udde6-\uddff]){2}|[\ud800-\udbff][\udc00-\udfff]|[\u0023-\u0039]\ufe0f?\u20e3|\u3299|\u3297|\u303d|\u3030|\u24c2|\ud83c[\udd70-\udd71]|\ud83c[\udd7e-\udd7f]|\ud83c\udd8e|\ud83c[\udd91-\udd9a]|\ud83c[\udde6-\uddff]|\ud83c[\ude01-\ude02]|\ud83c\ude1a|\ud83c\ude2f|\ud83c[\ude32-\ude3a]|\ud83c[\ude50-\ude51]|\u203c|\u2049|[\u25aa-\u25ab]|\u25b6|\u25c0|[\u25fb-\u25fe]|\u00a9|\u00ae|\u2122|\u2139|\ud83c\udc04|[\u2600-\u26FF]|\u2b05|\u2b06|\u2b07|\u2b1b|\u2b1c|\u2b50|\u2b55|\u231a|\u231b|\u2328|\u23cf|[\u23e9-\u23f3]|[\u23f8-\u23fa]|\ud83c\udccf|\u2934|\u2935|[\u2190-\u21ff])/g;
+        var nomeContato = contact.pushname.replace(regex,'');
+        //console.log(value);
+        connection.query(sql, [value], function (err, result, fields) {
+            if (result[0].count > 0) {
+                //console.log('ja existe');
+            } else {
+                console.log('Novo número encontrado!');
+                var sql = "INSERT INTO massaDados (telefone, nome) VALUES ?";
+                var values = [
+                    [contact.number, nomeContato]
+                ];
+                connection.query(sql, [values], function (err, result) {
+                    if (err) throw err;
+                    console.log("Inserido número: " + result.affectedRows);
+                    return true;
+                });
+            }
+            return true;
+            //connection.end();
+            //get(id);
+        });
+        return true;
+    }
     async function inserirBanco(id, link) {
         await sleep(1000);
         inserido = await insert(id, link);
@@ -77,7 +124,6 @@ client.on('message', async msg => {
         atualizado = await updateLink(id, link);
         pegaLink = await getLink(id);
     }
-
     async function insert(id, link) {
         await sleep(1000);
         var sql = "SELECT COUNT(*) AS count FROM usuarios WHERE id = ?";
@@ -110,12 +156,6 @@ client.on('message', async msg => {
             //get(id);
         });
         return true;
-    }
-    function select() {
-        connection.query("SELECT * FROM usuarios", function (err, result, fields) {
-            if (err) throw err;
-            console.log('select db ' + result);
-        });
     }
     async function getLink(id) {
         await sleep(1000);
@@ -183,15 +223,43 @@ client.on('message', async msg => {
         connection.end();
     }
 
-    const contact = await msg.getContact();
     var user = new User(contact.number, "");
     //console.log('MESSAGE RECEIVED', msg.from, ' __ ', msg.type);
-    if (msg.body === 'Ativar') {
+    if (msg.body === 'Mensagem Personalizada') {
+        let chat = await msg.getChat();
+        if (!chat.isGroup) {
+            // Send a new message as a reply to the current one
+            msg.reply(`Digite o numero a ser enviado, iniciando sempre com 55\n"+
+            ", DDD e, se quiser especificar número, digite o numero também.\n"+
+            "Exemplo: 5531 envia para todos 31\n55319707 envia para estes numeros?!`);
+            // Limited to 5 buttons per message and limited to 3 buttons for each kind, in this case the third quick reply button will be remove
+
+        }
+    } else if (msg.body.startsWith('55')) {
+        let chat = await msg.getChat();
+        if (!chat.isGroup) {
+            DDD = msg.body;
+            // Send a new message as a reply to the current one
+            msg.reply(`Qual a mensagem a ser enviada?!`);
+            PERSONALIZANDO = true;
+            
+        }
+    } else if (PERSONALIZANDO === true && msg.body != null) {
+        let chat = await msg.getChat();
+        if (!chat.isGroup) {
+            MENSAGEM = msg.body;
+            // Send a new message as a reply to the current one
+            msg.reply(`Enviando mensagem`);
+            select(DDD, MENSAGEM);
+            PERSONALIZANDO = false;            
+        }
+    }
+    else if (msg.body === 'Ativar') {
         let chat = await msg.getChat();
         if (!chat.isGroup) {
             // Send a new message as a reply to the current one
             msg.reply(`Olá ${contact.name}!`);
-            db.insert(user.id, '');
+            inserirBanco(user.id, '');
             msg.reply(user.id);
             let button = new Buttons(
                 'Opções',
@@ -379,7 +447,6 @@ client.on('message', async msg => {
             console.log('Foi inserido? --- ' + inserido);
             console.log('Qual o link --- ' + pegaLink);
         }
-
     }
     else if (msg.body.startsWith('I-')) {
         I();
@@ -393,15 +460,6 @@ client.on('message', async msg => {
             console.log('Foi atualizado? --- ' + atualizado);
             console.log('Qual o link --- ' + pegaLink);
         }
-        /*
-        const prcSelec = msg.body.slice(2);
-        msg.reply('Escolhido preço mínimo de ' + prcSelec +
-            '\nAgora, informe um valor *FINAL* desta forma: *"M-10000". PRECISA ser desta forma*');
-        //startCon();
-        getLink(user.id);
-        sleep(5000);
-        console.log('LINK I  --- ' + link);*/
-
     }
     else if (msg.body.startsWith('M-')) {
         M();
@@ -561,7 +619,7 @@ client.on('message', async msg => {
             client.sendMessage(msg.from, '*USE COM MODERAÇÃO* https://felpsti.com.br/');
         }
     }
-    
+
 
 
 
@@ -643,7 +701,7 @@ client.on('message_ack', (msg, ack) => {
         // The message was read
     }
 });
-
+/*
 client.on('group_join', (notification) => {
     // User has joined or been added to the group.
     console.log('join', notification);
@@ -659,7 +717,7 @@ client.on('group_leave', (notification) => {
 client.on('group_update', (notification) => {
     // Group picture, subject or description has been updated.
     console.log('update', notification);
-});
+});*/
 
 client.on('change_state', state => {
     console.log('CHANGE STATE', state);
